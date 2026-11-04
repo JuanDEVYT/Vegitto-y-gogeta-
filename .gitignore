@@ -1,0 +1,6 @@
+# Kit oficial del contrato: se copia para validar en local, no se versiona aquí.
+sdk/
+contract.json
+
+# Artefactos del kit
+.kino-shared.json
