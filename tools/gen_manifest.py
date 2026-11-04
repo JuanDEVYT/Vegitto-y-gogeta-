@@ -118,7 +118,7 @@ I_DOT, I_DOT_RADIUS = (343.0, 123.0), 25.0
 R, RT = STROKE / 2, TV_STROKE / 2
 K_TOP = (142.0, 122.0)               # esquina superior del asta de la "k": ahí nace el mechón
 TUFT_ROOT = 16.0                     # raíz sólida del mechón, dentro del trazo de la letra
-BAR_Y0, BAR_Y1 = 356.0, 366.0        # la barra bajo "kino"
+BAR_Y0, BAR_Y1 = 352.0, 362.0        # la barra bajo "kino" (pegada a las letras)
 BAR_X0, BAR_X1, BAR_SPLIT = 126.0, 600.0, 340.0
 
 def kino_k():
@@ -147,7 +147,7 @@ def kino_o_ring():
 def wordmark_tuft(which):
     """Mechón sobre la "k": una raíz sólida dentro del trazo y mechones hacia arriba."""
     angles = [184, 218, 250, 282, 314, 348]             # 5 mechones: 6 bordes
-    radii = [54, 70, 82, 66, 50]
+    radii = [46, 58, 68, 58, 44]
     spikes = tuft(K_TOP[0], K_TOP[1], angles, radii, 20.0)
     root = [circle(K_TOP[0], K_TOP[1], TUFT_ROOT, 12)]
     return (spikes[:2] + root, spikes[2:]) if which == "a_first" else (spikes[2:] + root, spikes[:2])
@@ -156,7 +156,7 @@ def mark_tuft(which):
     """Mechón sobre la marca: nace dentro del anillo de la "o"."""
     cx, cy = MARK_C[0], MARK_C[1] - 82.0
     angles = [198, 236, 268, 300, 338]                  # 4 mechones: 5 bordes
-    radii = [66, 82, 70, 54]
+    radii = [50, 62, 56, 42]
     spikes = tuft(cx, cy, angles, radii, 20.0)
     root = [circle(cx, cy, TUFT_ROOT, 12)]
     return (spikes[:2] + root, spikes[2:]) if which == "a_first" else (spikes[2:] + root, spikes[:2])
@@ -269,7 +269,7 @@ THEMES = [
 # ---------------------------------------------------------------- montaje del logo
 MARK_C = (98.0, 138.0)
 MARK_INNER_R = 58.0
-PAD = 12
+PAD = 3                              # margen mínimo: el dibujo tiene que llenar el lienzo
 
 def bbox(polys):
     xs = [p[0] for poly in polys for p in poly]
@@ -407,32 +407,47 @@ def polys_of(d):
             for sub in d.rstrip("Z").split("Z") if sub.strip()]
 
 def preview():
-    """Vista previa del logo SOLO: fondo transparente, sin ningún degradado."""
+    """Vista previa del logo SOLO: fondo transparente y recortada al dibujo, sin aire alrededor."""
     try:
         from PIL import Image, ImageDraw
     except ImportError:
         return None
     resolve = lambda t, f: t["colors"][f] if f in t["colors"] else f
-    row_h, pad, w = 220, 26, 1000
-    img = Image.new("RGBA", (w, row_h * len(THEMES)), (0, 0, 0, 0))
 
-    def paint(shape, ox, oy, s, theme):
+    def tile(shape, height, theme):
+        """Dibuja un logo en su propio lienzo y lo recorta al contenido."""
+        s = height / shape["size"][1]
+        w = int(math.ceil(shape["size"][0] * s))
+        h = int(math.ceil(shape["size"][1] * s))
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         for p in shape["paths"]:
             subs = polys_of(p["d"])
-            mask = Image.new("L", img.size, 0)
+            mask = Image.new("L", (w, h), 0)
             md = ImageDraw.Draw(mask)
             for j, poly in enumerate(subs):
-                md.polygon([(x * s + ox, y * s + oy) for x, y in poly],
+                md.polygon([(x * s, y * s) for x, y in poly],
                            fill=0 if (j == 1 and len(subs) == 2) else 255)
-            layer = Image.new("RGBA", img.size, resolve(theme, p["fill"]))
+            layer = Image.new("RGBA", (w, h), resolve(theme, p["fill"]))
             img.paste(layer, (0, 0), mask)
+        box = img.getbbox()
+        return img.crop(box) if box else img
 
-    for i, t in enumerate(THEMES):
+    rows, gap_x, gap_y = [], 26, 10
+    for t in THEMES:
         wm, mk = PREVIEW[t["id"]]
-        s = 165 / wm["size"][1]
-        paint(wm, pad, i * row_h + (row_h - wm["size"][1] * s) / 2, s, t)
-        ms = 145 / mk["size"][1]
-        paint(mk, w - pad - mk["size"][0] * ms, i * row_h + (row_h - mk["size"][1] * ms) / 2, ms, t)
+        a = tile(wm, 120, t)
+        b = tile(mk, 120, t)
+        row = Image.new("RGBA", (a.width + gap_x + b.width, max(a.height, b.height)), (0, 0, 0, 0))
+        row.paste(a, (0, (row.height - a.height) // 2))
+        row.paste(b, (a.width + gap_x, (row.height - b.height) // 2))
+        rows.append(row)
+    cw = max(r.width for r in rows)
+    ch = sum(r.height for r in rows) + gap_y * (len(rows) - 1)
+    img = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+    y = 0
+    for r in rows:
+        img.paste(r, (0, y))
+        y += r.height + gap_y
     out = os.path.join(ROOT, "preview-logos.png")
     img.save(out)
     return out
